@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from ..ratelimit import rate_limit
 from ..database import get_session
 from ..models import AppUser
 from ..schemas import AuthResponse, LoginRequest, RegisterRequest
@@ -12,7 +12,8 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=AuthResponse, response_model_by_alias=True,
-             status_code=status.HTTP_201_CREATED)
+             status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(rate_limit("register", 5, 60))])
 async def register(req: RegisterRequest, session: AsyncSession = Depends(get_session)):
     exists = (await session.execute(select(AppUser.id).where(AppUser.username == req.username))).first()
     if exists:
@@ -26,7 +27,8 @@ async def register(req: RegisterRequest, session: AsyncSession = Depends(get_ses
     return AuthResponse(token=create_token(req.username))
 
 
-@router.post("/login", response_model=AuthResponse, response_model_by_alias=True)
+@router.post("/login", response_model=AuthResponse, response_model_by_alias=True,
+             dependencies=[Depends(rate_limit("login", 10, 60))])
 async def login(req: LoginRequest, session: AsyncSession = Depends(get_session)):
     user = (await session.execute(select(AppUser).where(AppUser.username == req.username))).scalar_one_or_none()
     if user is None or not verify_password(req.password, user.password):

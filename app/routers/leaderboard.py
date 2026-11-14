@@ -3,7 +3,7 @@ import asyncio
 from fastapi import APIRouter, Depends, Path, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from ..ratelimit import rate_limit
 from ..database import SessionLocal, get_session
 from ..leaderboard import LeaderboardService
 from ..models import AppUser
@@ -17,7 +17,8 @@ def get_service(request: Request) -> LeaderboardService:
     return request.app.state.leaderboard
 
 
-@router.post("/scores", response_model=ScoreResponse, response_model_by_alias=True)
+@router.post("/scores", response_model=ScoreResponse, response_model_by_alias=True,
+             dependencies=[Depends(rate_limit("scores", 30, 60))])
 async def add_score(req: ScoreRequest, user: AppUser = Depends(current_user),
                     session: AsyncSession = Depends(get_session),
                     service: LeaderboardService = Depends(get_service)):
